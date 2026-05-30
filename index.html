@@ -1,0 +1,677 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sunrise Compass & Alignment Guide</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind Custom Config for iOS Fonts and Accents -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        iosBg: '#090A10',
+                        solarGold: '#FF9E00',
+                        solarOrange: '#FF5E00',
+                        solarTeal: '#00F5D4',
+                        glassBg: 'rgba(20, 22, 37, 0.6)',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)'
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Smooth turning animations for the compass dial */
+        .compass-dial {
+            transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        /* Custom scrollbar for mobile overlay lists */
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 99px;
+        }
+        /* Pulse aligned glow */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); border-color: rgba(16, 185, 129, 0.8); }
+            50% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.8); border-color: rgba(52, 211, 153, 1); }
+        }
+        .aligned-glow {
+            animation: pulse-glow 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="bg-iosBg text-white font-sans min-h-screen flex flex-col justify-between overflow-x-hidden select-none">
+
+    <!-- TOP BAR (Location Status & Coordinate readouts) -->
+    <header class="w-full px-6 pt-5 pb-3 z-10 flex justify-between items-center bg-gradient-to-b from-black/50 to-transparent">
+        <div class="flex items-center space-x-2">
+            <span class="relative flex h-3 w-3">
+                <span id="gps-status-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span id="gps-status-dot" class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+            </span>
+            <span id="location-name" class="text-sm font-medium tracking-wide text-zinc-300">Malaysia (Default)</span>
+        </div>
+        <button id="location-selector-btn" class="bg-glassBg hover:bg-zinc-800 border border-glassBorder px-3 py-1 rounded-full text-xs text-solarGold transition-all flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            Change Location
+        </button>
+    </header>
+
+    <!-- MAIN UI CONTAINER -->
+    <main class="flex-1 w-full flex flex-col items-center justify-center px-6 relative">
+        
+        <!-- ALIGNMENT HEADER STATUS -->
+        <div class="text-center mb-6 z-10">
+            <div id="alignment-action-text" class="text-2xl font-bold tracking-tight text-amber-500 transition-colors duration-200">
+                Determining direction...
+            </div>
+            <div id="alignment-subtext" class="text-xs text-zinc-400 mt-1 uppercase tracking-widest">
+                Keep phone level to ground
+            </div>
+        </div>
+
+        <!-- COMPASS DISPLAY WRAPPER -->
+        <div class="relative w-72 h-72 md:w-80 md:h-80 flex items-center justify-center my-4">
+            
+            <!-- OUTER GLOW OR CARDINAL MARKER RING (Fixed background) -->
+            <div id="compass-outer-glow" class="absolute inset-0 rounded-full border-2 border-dashed border-zinc-800 transition-all duration-300"></div>
+            
+            <!-- SHADOW DEPTH BACKDROP -->
+            <div class="absolute w-[92%] h-[92%] rounded-full bg-black/40 backdrop-blur-sm border border-glassBorder"></div>
+
+            <!-- ROTATING COMPASS DIAL (This is what spins when the device turns!) -->
+            <div id="compass-dial" class="compass-dial absolute w-full h-full rounded-full flex items-center justify-center">
+                <!-- Cardinal Labels -->
+                <span class="absolute top-4 text-xs font-bold text-red-500 tracking-wider">N</span>
+                <span class="absolute right-4 text-xs font-bold text-zinc-300">E</span>
+                <span class="absolute bottom-4 text-xs font-bold text-zinc-300">S</span>
+                <span class="absolute left-4 text-xs font-bold text-zinc-300">W</span>
+                
+                <!-- Secondary Cardinal Labels -->
+                <span class="absolute top-12 right-12 text-[10px] text-zinc-500 font-semibold">NE</span>
+                <span class="absolute bottom-12 right-12 text-[10px] text-zinc-500 font-semibold">SE</span>
+                <span class="absolute bottom-12 left-12 text-[10px] text-zinc-500 font-semibold">SW</span>
+                <span class="absolute top-12 left-12 text-[10px] text-zinc-500 font-semibold">NW</span>
+
+                <!-- Compass Tick Marks -->
+                <svg class="absolute w-full h-full opacity-30 transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="#ffffff" stroke-width="0.5" stroke-dasharray="1, 1.3" />
+                </svg>
+
+                <!-- SUNRISE AZIMUTH TARGET PIN (Dynamic positioning relative to true North) -->
+                <div id="sunrise-pointer" class="absolute w-full h-full transform" style="transform: rotate(0deg)">
+                    <!-- Radiant Sunrise Pointer/Beam -->
+                    <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[2px] flex flex-col items-center">
+                        <div class="w-1 h-12 bg-gradient-to-b from-solarGold via-solarOrange to-transparent rounded-full shadow-[0_0_10px_#FF9E00]"></div>
+                        <!-- Sun Icon Sphere -->
+                        <div class="w-8 h-8 -mt-6 bg-gradient-to-br from-yellow-300 to-amber-500 rounded-full flex items-center justify-center shadow-[0_0_15px_#FF9E00] border border-amber-300 animate-pulse">
+                            <svg class="w-5 h-5 text-black" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FIXED PHONE HEADING POINTER (Always points to top / front of iPhone) -->
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 flex flex-col items-center">
+                <!-- Glowing Align Arrow -->
+                <div id="device-arrow" class="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[18px] border-b-zinc-200 drop-shadow-[0_0_6px_rgba(255,255,255,0.6)]"></div>
+                <div class="w-0.5 h-6 bg-zinc-200 mt-1 opacity-80"></div>
+            </div>
+
+            <!-- COMPASS READOUT IN THE CENTER (Non-rotating) -->
+            <div class="absolute z-10 flex flex-col items-center justify-center text-center">
+                <span id="central-heading" class="text-4xl font-extrabold tracking-tight tabular-nums">0°</span>
+                <span id="central-cardinal" class="text-xs uppercase font-semibold text-zinc-400 mt-1">North</span>
+                <div class="w-10 h-[1px] bg-zinc-700 my-2"></div>
+                <span class="text-[10px] text-zinc-500 tracking-wider uppercase">Sunrise</span>
+                <span id="central-sunrise-deg" class="text-sm font-semibold text-solarGold tabular-nums">--°</span>
+            </div>
+
+        </div>
+
+        <!-- DETAILS CARD -->
+        <div class="w-full max-w-sm bg-glassBg border border-glassBorder rounded-2xl p-4 backdrop-blur-lg mt-4 grid grid-cols-2 gap-4">
+            
+            <div class="flex flex-col">
+                <span class="text-zinc-500 text-[10px] uppercase font-bold tracking-wider">Next Sunrise Time</span>
+                <div class="flex items-baseline mt-1 space-x-1">
+                    <span id="sunrise-time-display" class="text-xl font-bold text-white tracking-tight">Calculating</span>
+                </div>
+                <span id="sunrise-day-display" class="text-xs text-zinc-400 mt-0.5">Calculating...</span>
+            </div>
+
+            <div class="flex flex-col border-l border-zinc-800 pl-4">
+                <span class="text-zinc-500 text-[10px] uppercase font-bold tracking-wider">Sunrise Azimuth</span>
+                <div class="flex items-baseline mt-1 space-x-1">
+                    <span id="sunrise-angle-display" class="text-xl font-bold text-solarGold tracking-tight">--°</span>
+                </div>
+                <span id="sunrise-quadrant-display" class="text-xs text-zinc-400 mt-0.5">Determining...</span>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- SIMULATOR CONTROLLER (At bottom for desktops or mock users) -->
+    <footer class="w-full px-6 py-4 z-10 bg-gradient-to-t from-black via-black/80 to-transparent">
+        <div class="max-w-sm mx-auto flex flex-col space-y-3">
+            
+            <!-- Sensor Status & Request Access Row -->
+            <div class="flex items-center justify-between text-xs bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-900">
+                <div class="flex items-center space-x-2">
+                    <div class="w-2.5 h-2.5 rounded-full bg-red-500" id="sensor-indicator"></div>
+                    <span id="sensor-status-text" class="text-zinc-400 font-medium">Compass Sensor Inactive</span>
+                </div>
+                <button id="request-sensor-btn" class="bg-amber-500 hover:bg-amber-600 active:scale-95 text-black font-semibold px-3 py-1 rounded-lg text-[11px] transition-all">
+                    Enable Compass
+                </button>
+            </div>
+
+            <!-- Simulator Heading Slider -->
+            <div id="simulator-controls" class="flex flex-col space-y-1.5 p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
+                <div class="flex justify-between items-center text-xs">
+                    <span class="text-zinc-400 font-medium">Desktop Simulator Heading:</span>
+                    <span id="sim-heading-val" class="font-bold text-amber-400 tabular-nums">0°</span>
+                </div>
+                <input id="heading-slider" type="range" min="0" max="359" value="0" class="w-full accent-amber-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer">
+                <p class="text-[10px] text-zinc-500 text-center italic">Drag to simulate rotating your phone left or right.</p>
+            </div>
+
+        </div>
+    </footer>
+
+    <!-- MODAL: LOCATION SELECTOR overlay -->
+    <div id="location-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-6 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-zinc-950 border border-glassBorder w-full max-w-sm rounded-3xl p-6 shadow-2xl relative">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-4">
+                <svg class="w-5 h-5 text-solarGold" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Select Location
+            </h3>
+
+            <!-- Custom Lat/Lon input -->
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase font-semibold">Latitude</label>
+                    <input type="number" id="custom-lat" step="0.0001" placeholder="e.g. 3.1390" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500">
+                </div>
+                <div>
+                    <label class="text-[10px] text-zinc-500 uppercase font-semibold">Longitude</label>
+                    <input type="number" id="custom-lon" step="0.0001" placeholder="e.g. 101.6869" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500">
+                </div>
+            </div>
+
+            <button id="apply-custom-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-2.5 rounded-xl text-xs transition-all mb-4">
+                Apply Custom Coordinates
+            </button>
+
+            <!-- Quick Presets -->
+            <div class="border-t border-zinc-900 pt-3">
+                <div class="text-[10px] text-zinc-500 uppercase font-semibold mb-2">Popular Cities</div>
+                <div class="max-h-40 overflow-y-auto space-y-1 pr-1">
+                    <button class="preset-btn w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-zinc-900 flex justify-between items-center transition-all" data-name="Kuala Lumpur, MY" data-lat="3.1390" data-lon="101.6869">
+                        <span>Kuala Lumpur, Malaysia</span>
+                        <span class="text-zinc-500 font-mono">3.1° N</span>
+                    </button>
+                    <button class="preset-btn w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-zinc-900 flex justify-between items-center transition-all" data-name="Tokyo, JP" data-lat="35.6762" data-lon="139.6503">
+                        <span>Tokyo, Japan</span>
+                        <span class="text-zinc-500 font-mono">35.6° N</span>
+                    </button>
+                    <button class="preset-btn w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-zinc-900 flex justify-between items-center transition-all" data-name="London, UK" data-lat="51.5074" data-lon="-0.1278">
+                        <span>London, United Kingdom</span>
+                        <span class="text-zinc-500 font-mono">51.5° N</span>
+                    </button>
+                    <button class="preset-btn w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-zinc-900 flex justify-between items-center transition-all" data-name="New York, US" data-lat="40.7128" data-lon="-74.0060">
+                        <span>New York, United States</span>
+                        <span class="text-zinc-500 font-mono">40.7° N</span>
+                    </button>
+                    <button class="preset-btn w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-zinc-900 flex justify-between items-center transition-all" data-name="Sydney, AU" data-lat="-33.8688" data-lon="151.2093">
+                        <span>Sydney, Australia</span>
+                        <span class="text-zinc-500 font-mono">33.8° S</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Close Modal -->
+            <button id="close-modal-btn" class="absolute top-4 right-4 text-zinc-500 hover:text-white transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN APP SCRIPT -->
+    <script>
+        // Default initial coordinates centered around Malaysia (Kuala Lumpur)
+        let lat = 3.1390;
+        let lon = 101.6869;
+        let locationName = "Kuala Lumpur, MY";
+
+        // Main Orientation & App State Variables
+        let compassHeading = 0; // Direction device's top is facing relative to True North
+        let sunriseAzimuth = 90; // Calculated true sunrise degree
+        let isSensorActive = false;
+        let sunriseCalculatedTime = null;
+        let sunriseIsTomorrow = false;
+
+        // Elements
+        const compassDial = document.getElementById('compass-dial');
+        const sunrisePointer = document.getElementById('sunrise-pointer');
+        const centralHeading = document.getElementById('central-heading');
+        const centralCardinal = document.getElementById('central-cardinal');
+        const centralSunriseDeg = document.getElementById('central-sunrise-deg');
+        
+        const alignmentActionText = document.getElementById('alignment-action-text');
+        const alignmentSubtext = document.getElementById('alignment-subtext');
+        const compassOuterGlow = document.getElementById('compass-outer-glow');
+
+        const sunriseTimeDisplay = document.getElementById('sunrise-time-display');
+        const sunriseDayDisplay = document.getElementById('sunrise-day-display');
+        const sunriseAngleDisplay = document.getElementById('sunrise-angle-display');
+        const sunriseQuadrantDisplay = document.getElementById('sunrise-quadrant-display');
+
+        const locationNameEl = document.getElementById('location-name');
+        const gpsStatusDot = document.getElementById('gps-status-dot');
+        const gpsStatusPulse = document.getElementById('gps-status-pulse');
+
+        const sensorIndicator = document.getElementById('sensor-indicator');
+        const sensorStatusText = document.getElementById('sensor-status-text');
+        const requestSensorBtn = document.getElementById('request-sensor-btn');
+
+        const headingSlider = document.getElementById('heading-slider');
+        const simHeadingVal = document.getElementById('sim-heading-val');
+
+        const locationSelectorBtn = document.getElementById('location-selector-btn');
+        const locationModal = document.getElementById('location-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const applyCustomBtn = document.getElementById('apply-custom-btn');
+        const customLat = document.getElementById('custom-lat');
+        const customLon = document.getElementById('custom-lon');
+
+        // Initial setup and bindings
+        window.addEventListener('load', () => {
+            initApp();
+        });
+
+        function initApp() {
+            // Attempt to get user's active geolocation
+            fetchGeolocation();
+
+            // Setup interaction handlers
+            setupLocationModal();
+            setupSensorHandlers();
+            setupHeadingSimulation();
+            
+            // Recalculate astronomical elements initially
+            recalculateSunrise();
+
+            // Begin UI updates
+            updateUI();
+        }
+
+        // Setup manual simulator handlers (slider inputs)
+        function setupHeadingSimulation() {
+            headingSlider.addEventListener('input', (e) => {
+                if (!isSensorActive) {
+                    const simHeading = parseInt(e.target.value, 10);
+                    simHeadingVal.textContent = `${simHeading}°`;
+                    updateHeading(simHeading);
+                }
+            });
+        }
+
+        // Setup custom location presets and manual coords input
+        function setupLocationModal() {
+            locationSelectorBtn.addEventListener('click', () => {
+                locationModal.classList.remove('opacity-0', 'pointer-events-none');
+            });
+            closeModalBtn.addEventListener('click', () => {
+                locationModal.classList.add('opacity-0', 'pointer-events-none');
+            });
+
+            // Set preset cities
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    lat = parseFloat(btn.dataset.lat);
+                    lon = parseFloat(btn.dataset.lon);
+                    locationName = btn.dataset.name;
+                    locationNameEl.textContent = locationName;
+                    
+                    customLat.value = lat;
+                    customLon.value = lon;
+
+                    recalculateSunrise();
+                    updateUI();
+                    locationModal.classList.add('opacity-0', 'pointer-events-none');
+
+                    // Turn GPS status indicator yellow to show manual override
+                    gpsStatusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-amber-500";
+                    gpsStatusPulse.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
+                });
+            });
+
+            applyCustomBtn.addEventListener('click', () => {
+                const manualLat = parseFloat(customLat.value);
+                const manualLon = parseFloat(customLon.value);
+                if (!isNaN(manualLat) && !isNaN(manualLon)) {
+                    lat = manualLat;
+                    lon = manualLon;
+                    locationName = `${lat.toFixed(3)}°N, ${lon.toFixed(3)}°E`;
+                    locationNameEl.textContent = locationName;
+                    recalculateSunrise();
+                    updateUI();
+                    locationModal.classList.add('opacity-0', 'pointer-events-none');
+                }
+            });
+        }
+
+        // GPS handler
+        function fetchGeolocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        lat = position.coords.latitude;
+                        lon = position.coords.longitude;
+                        locationName = "My Location";
+                        locationNameEl.textContent = locationName;
+
+                        // Fill custom input values as nice fallback tracking
+                        customLat.value = lat.toFixed(4);
+                        customLon.value = lon.toFixed(4);
+
+                        // Turn GPS status indicator green
+                        gpsStatusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-emerald-500";
+                        gpsStatusPulse.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+
+                        recalculateSunrise();
+                        updateUI();
+                    },
+                    (error) => {
+                        console.warn("GPS Unavailable. Using default coordinates (Malaysia). Error code:", error.code);
+                        // Stay amber-orange representing default preset fallback
+                        gpsStatusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-amber-600";
+                        gpsStatusPulse.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-50";
+                        
+                        customLat.value = lat.toFixed(4);
+                        customLon.value = lon.toFixed(4);
+                    }
+                );
+            }
+        }
+
+        // Compass Permission requests for iOS & Device Orientation activation
+        function setupSensorHandlers() {
+            requestSensorBtn.addEventListener('click', () => {
+                requestCompassPermission();
+            });
+        }
+
+        async function requestCompassPermission() {
+            // Check if Request Permission is standard (specifically iOS 13+ Safari)
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        startCompassTracking();
+                    } else {
+                        showSensorError("Compass permission denied. Please enable motion access.");
+                    }
+                } catch (error) {
+                    console.error("Orientation permission request failed:", error);
+                    showSensorError("Sensor authorization error.");
+                }
+            } else {
+                // For non-iOS modern Android browsers or platforms where authorization is implicit
+                startCompassTracking();
+            }
+        }
+
+        function startCompassTracking() {
+            window.addEventListener('deviceorientation', handleOrientation, true);
+            // Android uses absolute event for accurate heading relative to true north
+            window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+
+            isSensorActive = true;
+            sensorIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10B981]";
+            sensorStatusText.textContent = "Hardware Compass Active";
+            requestSensorBtn.textContent = "Authorized";
+            requestSensorBtn.disabled = true;
+            requestSensorBtn.className = "bg-zinc-800 text-zinc-500 font-semibold px-3 py-1 rounded-lg text-[11px] cursor-default";
+
+            // Hide the desktop simulator slider inputs when active hardware sensors exist
+            document.getElementById('simulator-controls').classList.add('opacity-40', 'pointer-events-none');
+        }
+
+        function handleOrientation(event) {
+            let heading = null;
+
+            // iOS proprietary property
+            if (event.webkitCompassHeading !== undefined) {
+                heading = event.webkitCompassHeading;
+            } 
+            // Android absolute alpha properties
+            else if (event.absolute === true && event.alpha !== null) {
+                heading = 360 - event.alpha; // Convert to CW degrees
+            } 
+            else if (event.alpha !== null) {
+                // Relative fallback
+                heading = 360 - event.alpha;
+            }
+
+            if (heading !== null) {
+                updateHeading(heading);
+            }
+        }
+
+        function showSensorError(msg) {
+            sensorIndicator.className = "w-2.5 h-2.5 rounded-full bg-red-600";
+            sensorStatusText.textContent = msg;
+        }
+
+        // Updates the physical heading angle (orientation of phone top)
+        function updateHeading(heading) {
+            compassHeading = Math.round(heading % 360);
+            updateUI();
+        }
+
+        // NOAA solar position algorithms to compute next sunrise time and true azimuth
+        function recalculateSunrise() {
+            const today = new Date();
+            let result = runSunriseAlgorithm(lat, lon, today);
+
+            // Get local decimal hours representation
+            const now = new Date();
+            const currentLocalHour = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+
+            // If calculated sunrise is already in the past for today, target tomorrow's calendar date
+            if (result.hours && result.hours < currentLocalHour) {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                result = runSunriseAlgorithm(lat, lon, tomorrow);
+                sunriseIsTomorrow = true;
+            } else {
+                sunriseIsTomorrow = false;
+            }
+
+            if (result.error) {
+                sunriseTimeDisplay.textContent = "No Sunrise";
+                sunriseDayDisplay.textContent = result.error;
+                sunriseAngleDisplay.textContent = "--°";
+                sunriseQuadrantDisplay.textContent = "Extreme Latitude";
+                sunriseAzimuth = 90; // Default flat East
+            } else {
+                sunriseAzimuth = Math.round(result.azimuth * 10) / 10;
+                
+                // Formulate sunrise time display
+                const decimalHours = result.hours;
+                const hh = Math.floor(decimalHours);
+                const minDecimal = (decimalHours - hh) * 60;
+                const mm = Math.floor(minDecimal);
+                const ss = Math.round((minDecimal - mm) * 60);
+
+                const period = hh >= 12 ? 'PM' : 'AM';
+                const standardHour = hh % 12 === 0 ? 12 : hh % 12;
+                const formattedTime = `${standardHour}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')} ${period}`;
+                
+                sunriseTimeDisplay.textContent = formattedTime;
+                sunriseDayDisplay.textContent = sunriseIsTomorrow ? "Tomorrow" : "Today";
+                sunriseAngleDisplay.textContent = `${sunriseAzimuth}°`;
+                sunriseQuadrantDisplay.textContent = getHeadingCardinal(sunriseAzimuth);
+                centralSunriseDeg.textContent = `${sunriseAzimuth}° ${getHeadingCardinal(sunriseAzimuth)}`;
+            }
+        }
+
+        // Compact adaptation of standard Solar Almanac Calculations
+        function runSunriseAlgorithm(latitude, longitude, date) {
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+
+            // Calculate day of the year
+            const N1 = Math.floor(275 * month / 9);
+            const N2 = Math.floor((month + 9) / 12);
+            const N3 = (1 + Math.floor((year - 4 * Math.floor(year / 4) + 2) / 3));
+            const N = N1 - (N2 * N3) + day - 30;
+
+            // Approximate rising longitude time
+            const lngHour = longitude / 15;
+            const t = N + ((6 - lngHour) / 24);
+
+            // Solar Mean Anomaly
+            const M = (0.9856 * t) - 3.289;
+
+            // Sun's true longitude
+            let L = M + (1.916 * Math.sin(M * Math.PI / 180)) + (0.020 * Math.sin(2 * M * Math.PI / 180)) + 282.634;
+            L = (L + 360) % 360;
+
+            // Right ascension
+            let RA = Math.atan(0.91764 * Math.tan(L * Math.PI / 180)) * 180 / Math.PI;
+            RA = (RA + 360) % 360;
+
+            // Quadrant adjustment
+            const lQuadrant = Math.floor(L / 90) * 90;
+            const raQuadrant = Math.floor(RA / 90) * 90;
+            RA = RA + (lQuadrant - raQuadrant);
+            RA = RA / 15; // Convert back to hours
+
+            // Solar declination
+            const sinDec = 0.39782 * Math.sin(L * Math.PI / 180);
+            const cosDec = Math.cos(Math.asin(sinDec));
+
+            // Standard astronomical twilight standard offset for sunrise is 90.833°
+            const zenith = 90.833; 
+            const zenithRad = zenith * Math.PI / 180;
+            const latRad = latitude * Math.PI / 180;
+
+            const cosH = (Math.cos(zenithRad) - (sinDec * Math.sin(latRad))) / (cosDec * Math.cos(latRad));
+
+            if (cosH > 1) return { error: "Polar Night" };
+            if (cosH < -1) return { error: "Polar Day" };
+
+            // Calculate local hour angle in hours
+            const H = (360 - Math.acos(cosH) * 180 / Math.PI) / 15;
+
+            // Local mean time of rising
+            const T = H + RA - (0.06571 * t) - 6.622;
+
+            // Convert to UTC
+            let UT = T - lngHour;
+            UT = (UT + 24) % 24;
+
+            // Shift UTC to user's local standard/daylight offsets
+            const localOffset = -date.getTimezoneOffset() / 60;
+            let localT = UT + localOffset;
+            localT = (localT + 24) % 24;
+
+            // Compute exact Azimuth at sunrise: 
+            // cos(Azimuth) = (sin(declination) - sin(latitude)*sin(-0.833)) / (cos(latitude)*cos(-0.833))
+            const decRad = Math.asin(sinDec);
+            const cosA = (sinDec - Math.sin(latRad) * Math.sin(-0.833 * Math.PI / 180)) / (Math.cos(latRad) * Math.cos(-0.833 * Math.PI / 180));
+            let Azimuth = Math.acos(Math.max(-1, Math.min(1, cosA))) * 180 / Math.PI;
+
+            // Sunrise rises strictly in the East (bound from 0 to 180)
+            if (longitude < 0 && Azimuth > 180) {
+                Azimuth = 360 - Azimuth;
+            }
+
+            return {
+                hours: localT,
+                azimuth: Azimuth
+            };
+        }
+
+        // Cardinal translation function
+        function getHeadingCardinal(deg) {
+            const index = Math.round(deg / 45) % 8;
+            const cardinals = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+            return cardinals[index];
+        }
+
+        // Active graphics render tick
+        function updateUI() {
+            // Update center text readings
+            centralHeading.textContent = `${compassHeading}°`;
+            centralCardinal.textContent = getHeadingCardinal(compassHeading);
+
+            // Position the Sun element on the dial relative to N (0 deg)
+            sunrisePointer.style.transform = `rotate(${sunriseAzimuth}deg)`;
+
+            // Rotate the actual dial against the user's heading
+            // If heading = 30, the dial must rotate -30 deg to match actual world positioning
+            const visualRotation = -compassHeading;
+            compassDial.style.transform = `rotate(${visualRotation}deg)`;
+
+            // Compute alignment orientation difference
+            // We want to calculate the shortest path angular delta between phone heading and sunrise
+            let delta = sunriseAzimuth - compassHeading;
+            
+            // Normalize angular difference bounds to (-180, 180]
+            while (delta < -180) delta += 360;
+            while (delta > 180) delta -= 360;
+
+            const absDelta = Math.abs(delta);
+
+            if (absDelta <= 2) {
+                // Perfect alignment!
+                alignmentActionText.textContent = "ALIGNED PERFECTLY";
+                alignmentActionText.className = "text-2xl font-black tracking-tight text-emerald-400 transition-colors";
+                alignmentSubtext.innerHTML = `Anticipate Sunrise at <span class="text-white font-bold">${sunriseAngleDisplay.textContent}</span>`;
+                compassOuterGlow.className = "absolute inset-0 rounded-full border-2 border-emerald-400 aligned-glow transition-all duration-300";
+            } else {
+                // Alignment guidance directional calculations
+                compassOuterGlow.className = "absolute inset-0 rounded-full border-2 border-dashed border-zinc-800 transition-all duration-300";
+                
+                if (delta > 0) {
+                    alignmentActionText.textContent = `▶ Rotate ${Math.round(absDelta)}° Right`;
+                    alignmentActionText.className = "text-2xl font-bold tracking-tight text-solarGold transition-colors";
+                } else {
+                    alignmentActionText.textContent = `◀ Rotate ${Math.round(absDelta)}° Left`;
+                    alignmentActionText.className = "text-2xl font-bold tracking-tight text-solarOrange transition-colors";
+                }
+                
+                if (absDelta < 15) {
+                    alignmentSubtext.textContent = "Almost there! Steady your phone.";
+                    compassOuterGlow.className = "absolute inset-0 rounded-full border border-amber-500/40 transition-all duration-300";
+                } else {
+                    alignmentSubtext.textContent = "Turn phone to align arrow with the sun";
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+
+```
