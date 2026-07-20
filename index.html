@@ -124,6 +124,13 @@
                         </div>
                     </div>
                 </div>
+                <!-- SUNSET TARGET PIN -->
+                <div id="sunset-pointer" class="absolute w-full h-full transform" style="transform: rotate(0deg)">
+                    <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[2px] flex flex-col items-center">
+                        <div class="w-1 h-12 bg-gradient-to-b from-violet-400 via-fuchsia-600 to-transparent rounded-full shadow-[0_0_10px_#C084FC]"></div>
+                        <div class="w-8 h-8 -mt-6 bg-gradient-to-br from-fuchsia-400 to-violet-700 rounded-full flex items-center justify-center shadow-[0_0_15px_#C084FC] border border-fuchsia-300 text-white text-lg leading-none">▲</div>
+                    </div>
+                </div>
             </div>
 
             <!-- FIXED PHONE HEADING POINTER (Always points to top / front of iPhone) -->
@@ -161,6 +168,21 @@
                     <span id="sunrise-angle-display" class="text-xl font-bold text-solarGold tracking-tight">--°</span>
                 </div>
                 <span id="sunrise-quadrant-display" class="text-xs text-zinc-400 mt-0.5">Determining...</span>
+            </div>
+            <div class="flex flex-col border-t border-zinc-800 pt-4">
+                <span class="text-zinc-500 text-[10px] uppercase font-bold tracking-wider">Next Sunset Time</span>
+                <div class="flex items-baseline mt-1 space-x-1">
+                    <span id="sunset-time-display" class="text-xl font-bold text-white tracking-tight">Calculating</span>
+                </div>
+                <span id="sunset-day-display" class="text-xs text-zinc-400 mt-0.5">Calculating...</span>
+            </div>
+            <div class="flex flex-col border-l border-t border-zinc-800 pl-4 pt-4">
+                <span class="text-zinc-500 text-[10px] uppercase font-bold tracking-wider">Sunset Direction</span>
+                <div class="flex items-baseline mt-1 space-x-1">
+                    <span id="sunset-angle-display" class="text-xl font-bold text-fuchsia-300 tracking-tight">--°</span>
+                    <span class="text-fuchsia-300 text-lg" title="The purple arrow on the compass points toward sunset">▲</span>
+                </div>
+                <span id="sunset-quadrant-display" class="text-xs text-zinc-400 mt-0.5">Determining...</span>
             </div>
 
         </div>
@@ -202,6 +224,9 @@
                 <svg class="w-5 h-5 text-solarGold" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                 Select Location
             </h3>
+            <button id="use-gps-btn" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-2.5 rounded-xl text-xs transition-all mb-2">Use Current GPS Location</button>
+            <button id="google-maps-btn" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all mb-4">Choose a pin in Google Maps</button>
+            <p class="text-[10px] text-zinc-500 -mt-2 mb-4">Google Maps opens in a new tab. Tap and hold a point, then paste its coordinates below.</p>
 
             <!-- Custom Lat/Lon input -->
             <div class="grid grid-cols-2 gap-2 mb-4">
@@ -263,13 +288,14 @@
         // Main Orientation & App State Variables
         let compassHeading = 0; // Direction device's top is facing relative to True North
         let sunriseAzimuth = 90; // Calculated true sunrise degree
+        let sunsetAzimuth = 270;
         let isSensorActive = false;
-        let sunriseCalculatedTime = null;
-        let sunriseIsTomorrow = false;
+        let geolocationWatchId = null;
 
         // Elements
         const compassDial = document.getElementById('compass-dial');
         const sunrisePointer = document.getElementById('sunrise-pointer');
+        const sunsetPointer = document.getElementById('sunset-pointer');
         const centralHeading = document.getElementById('central-heading');
         const centralCardinal = document.getElementById('central-cardinal');
         const centralSunriseDeg = document.getElementById('central-sunrise-deg');
@@ -282,6 +308,10 @@
         const sunriseDayDisplay = document.getElementById('sunrise-day-display');
         const sunriseAngleDisplay = document.getElementById('sunrise-angle-display');
         const sunriseQuadrantDisplay = document.getElementById('sunrise-quadrant-display');
+        const sunsetTimeDisplay = document.getElementById('sunset-time-display');
+        const sunsetDayDisplay = document.getElementById('sunset-day-display');
+        const sunsetAngleDisplay = document.getElementById('sunset-angle-display');
+        const sunsetQuadrantDisplay = document.getElementById('sunset-quadrant-display');
 
         const locationNameEl = document.getElementById('location-name');
         const gpsStatusDot = document.getElementById('gps-status-dot');
@@ -300,6 +330,8 @@
         const applyCustomBtn = document.getElementById('apply-custom-btn');
         const customLat = document.getElementById('custom-lat');
         const customLon = document.getElementById('custom-lon');
+        const useGpsBtn = document.getElementById('use-gps-btn');
+        const googleMapsBtn = document.getElementById('google-maps-btn');
 
         // Initial setup and bindings
         window.addEventListener('load', () => {
@@ -345,47 +377,54 @@
             // Set preset cities
             document.querySelectorAll('.preset-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    lat = parseFloat(btn.dataset.lat);
-                    lon = parseFloat(btn.dataset.lon);
-                    locationName = btn.dataset.name;
-                    locationNameEl.textContent = locationName;
-                    
-                    customLat.value = lat;
-                    customLon.value = lon;
-
-                    recalculateSunrise();
-                    updateUI();
+                    setManualLocation(parseFloat(btn.dataset.lat), parseFloat(btn.dataset.lon), btn.dataset.name);
                     locationModal.classList.add('opacity-0', 'pointer-events-none');
-
-                    // Turn GPS status indicator yellow to show manual override
-                    gpsStatusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-amber-500";
-                    gpsStatusPulse.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
                 });
             });
 
             applyCustomBtn.addEventListener('click', () => {
                 const manualLat = parseFloat(customLat.value);
                 const manualLon = parseFloat(customLon.value);
-                if (!isNaN(manualLat) && !isNaN(manualLon)) {
-                    lat = manualLat;
-                    lon = manualLon;
-                    locationName = `${lat.toFixed(3)}°N, ${lon.toFixed(3)}°E`;
-                    locationNameEl.textContent = locationName;
-                    recalculateSunrise();
-                    updateUI();
+                if (Number.isFinite(manualLat) && Number.isFinite(manualLon) && Math.abs(manualLat) <= 90 && Math.abs(manualLon) <= 180) {
+                    setManualLocation(manualLat, manualLon, `${manualLat.toFixed(3)}°, ${manualLon.toFixed(3)}°`);
                     locationModal.classList.add('opacity-0', 'pointer-events-none');
                 }
             });
+
+            useGpsBtn.addEventListener('click', () => {
+                fetchGeolocation();
+                locationModal.classList.add('opacity-0', 'pointer-events-none');
+            });
+            googleMapsBtn.addEventListener('click', () => {
+                const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
+                window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+            });
+        }
+
+        function setManualLocation(nextLat, nextLon, name) {
+            if (geolocationWatchId !== null) navigator.geolocation.clearWatch(geolocationWatchId);
+            geolocationWatchId = null;
+            lat = nextLat;
+            lon = nextLon;
+            locationName = name;
+            locationNameEl.textContent = locationName;
+            customLat.value = lat.toFixed(4);
+            customLon.value = lon.toFixed(4);
+            gpsStatusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-amber-500";
+            gpsStatusPulse.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
+            recalculateSunrise();
+            updateUI();
         }
 
         // GPS handler
         function fetchGeolocation() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
+                if (geolocationWatchId !== null) navigator.geolocation.clearWatch(geolocationWatchId);
+                geolocationWatchId = navigator.geolocation.watchPosition(
                     (position) => {
                         lat = position.coords.latitude;
                         lon = position.coords.longitude;
-                        locationName = "My Location";
+                        locationName = "Current GPS Location";
                         locationNameEl.textContent = locationName;
 
                         // Fill custom input values as nice fallback tracking
@@ -407,7 +446,8 @@
                         
                         customLat.value = lat.toFixed(4);
                         customLon.value = lon.toFixed(4);
-                    }
+                    },
+                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
                 );
             }
         }
@@ -487,55 +527,61 @@
             updateUI();
         }
 
-        // NOAA solar position algorithms to compute next sunrise time and true azimuth
+        // NOAA solar position algorithms to compute the next sunrise/sunset and true azimuths.
         function recalculateSunrise() {
+            const sunrise = getNextSolarEvent('sunrise');
+            const sunset = getNextSolarEvent('sunset');
+            renderSolarEvent(sunrise, 'sunrise');
+            renderSolarEvent(sunset, 'sunset');
+        }
+
+        function getNextSolarEvent(event) {
             const today = new Date();
-            let result = runSunriseAlgorithm(lat, lon, today);
-
-            // Get local decimal hours representation
-            const now = new Date();
-            const currentLocalHour = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
-
-            // If calculated sunrise is already in the past for today, target tomorrow's calendar date
-            if (result.hours && result.hours < currentLocalHour) {
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                result = runSunriseAlgorithm(lat, lon, tomorrow);
-                sunriseIsTomorrow = true;
-            } else {
-                sunriseIsTomorrow = false;
+            let result = runSolarAlgorithm(lat, lon, today, event);
+            const nowHours = today.getHours() + today.getMinutes() / 60 + today.getSeconds() / 3600;
+            let tomorrow = false;
+            if (!result.error && result.hours < nowHours) {
+                const nextDate = new Date(today);
+                nextDate.setDate(nextDate.getDate() + 1);
+                result = runSolarAlgorithm(lat, lon, nextDate, event);
+                tomorrow = true;
             }
+            return { ...result, tomorrow };
+        }
 
+        function renderSolarEvent(result, event) {
+            const isSunrise = event === 'sunrise';
+            const timeEl = isSunrise ? sunriseTimeDisplay : sunsetTimeDisplay;
+            const dayEl = isSunrise ? sunriseDayDisplay : sunsetDayDisplay;
+            const angleEl = isSunrise ? sunriseAngleDisplay : sunsetAngleDisplay;
+            const quadrantEl = isSunrise ? sunriseQuadrantDisplay : sunsetQuadrantDisplay;
             if (result.error) {
-                sunriseTimeDisplay.textContent = "No Sunrise";
-                sunriseDayDisplay.textContent = result.error;
-                sunriseAngleDisplay.textContent = "--°";
-                sunriseQuadrantDisplay.textContent = "Extreme Latitude";
-                sunriseAzimuth = 90; // Default flat East
+                timeEl.textContent = `No ${isSunrise ? 'Sunrise' : 'Sunset'}`;
+                dayEl.textContent = result.error;
+                angleEl.textContent = '--°';
+                quadrantEl.textContent = 'Extreme Latitude';
+                return;
+            }
+            const azimuth = Math.round(result.azimuth * 10) / 10;
+            const decimalHours = result.hours;
+            const hh = Math.floor(decimalHours);
+            const mm = Math.floor((decimalHours - hh) * 60);
+            const period = hh >= 12 ? 'PM' : 'AM';
+            const standardHour = hh % 12 || 12;
+            timeEl.textContent = `${standardHour}:${mm.toString().padStart(2, '0')} ${period}`;
+            dayEl.textContent = result.tomorrow ? 'Tomorrow' : 'Today';
+            angleEl.textContent = `${azimuth}°`;
+            quadrantEl.textContent = getHeadingCardinal(azimuth);
+            if (isSunrise) {
+                sunriseAzimuth = azimuth;
+                centralSunriseDeg.textContent = `${azimuth}° ${getHeadingCardinal(azimuth)}`;
             } else {
-                sunriseAzimuth = Math.round(result.azimuth * 10) / 10;
-                
-                // Formulate sunrise time display
-                const decimalHours = result.hours;
-                const hh = Math.floor(decimalHours);
-                const minDecimal = (decimalHours - hh) * 60;
-                const mm = Math.floor(minDecimal);
-                const ss = Math.round((minDecimal - mm) * 60);
-
-                const period = hh >= 12 ? 'PM' : 'AM';
-                const standardHour = hh % 12 === 0 ? 12 : hh % 12;
-                const formattedTime = `${standardHour}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')} ${period}`;
-                
-                sunriseTimeDisplay.textContent = formattedTime;
-                sunriseDayDisplay.textContent = sunriseIsTomorrow ? "Tomorrow" : "Today";
-                sunriseAngleDisplay.textContent = `${sunriseAzimuth}°`;
-                sunriseQuadrantDisplay.textContent = getHeadingCardinal(sunriseAzimuth);
-                centralSunriseDeg.textContent = `${sunriseAzimuth}° ${getHeadingCardinal(sunriseAzimuth)}`;
+                sunsetAzimuth = azimuth;
             }
         }
 
-        // Compact adaptation of standard Solar Almanac Calculations
-        function runSunriseAlgorithm(latitude, longitude, date) {
+        // Compact adaptation of standard Solar Almanac Calculations.
+        function runSolarAlgorithm(latitude, longitude, date, event) {
             const year = date.getFullYear();
             const month = date.getMonth() + 1;
             const day = date.getDate();
@@ -548,7 +594,8 @@
 
             // Approximate rising longitude time
             const lngHour = longitude / 15;
-            const t = N + ((6 - lngHour) / 24);
+            const isSunrise = event === 'sunrise';
+            const t = N + (((isSunrise ? 6 : 18) - lngHour) / 24);
 
             // Solar Mean Anomaly
             const M = (0.9856 * t) - 3.289;
@@ -582,7 +629,7 @@
             if (cosH < -1) return { error: "Polar Day" };
 
             // Calculate local hour angle in hours
-            const H = (360 - Math.acos(cosH) * 180 / Math.PI) / 15;
+            const H = (isSunrise ? 360 - Math.acos(cosH) * 180 / Math.PI : Math.acos(cosH) * 180 / Math.PI) / 15;
 
             // Local mean time of rising
             const T = H + RA - (0.06571 * t) - 6.622;
@@ -601,11 +648,7 @@
             const decRad = Math.asin(sinDec);
             const cosA = (sinDec - Math.sin(latRad) * Math.sin(-0.833 * Math.PI / 180)) / (Math.cos(latRad) * Math.cos(-0.833 * Math.PI / 180));
             let Azimuth = Math.acos(Math.max(-1, Math.min(1, cosA))) * 180 / Math.PI;
-
-            // Sunrise rises strictly in the East (bound from 0 to 180)
-            if (longitude < 0 && Azimuth > 180) {
-                Azimuth = 360 - Azimuth;
-            }
+            if (!isSunrise) Azimuth = 360 - Azimuth;
 
             return {
                 hours: localT,
@@ -628,6 +671,7 @@
 
             // Position the Sun element on the dial relative to N (0 deg)
             sunrisePointer.style.transform = `rotate(${sunriseAzimuth}deg)`;
+            sunsetPointer.style.transform = `rotate(${sunsetAzimuth}deg)`;
 
             // Rotate the actual dial against the user's heading
             // If heading = 30, the dial must rotate -30 deg to match actual world positioning
